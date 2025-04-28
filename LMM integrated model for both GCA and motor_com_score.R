@@ -117,17 +117,20 @@ create_scatter_plot <- function(data, x, y, r_squared, title) {
   min_val <- min(min(data[[x]]), min(data[[y]]))
   max_val <- max(max(data[[x]]), max(data[[y]]))
   
-  ggplot(data, aes(x = .data[[x]], y = .data[[y]])) +
+  # Note: Swapped x and y in the aes() mapping here
+  ggplot(data, aes(x = .data[[y]], y = .data[[x]])) +
     geom_point(alpha = 0.7, size = 8) +
     geom_smooth(method = "lm", se = TRUE, color = "darkblue", fill = "aquamarine2", size = 3) +
     geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red", size = 1) +  # Add perfect calibration line
-    labs(x = "Predicted Values", y = "Actual Values") +
+    # Swapped the labels as well
+    labs(x = "Actual Values", y = "Predicted Values") +
     theme_clean() +
     theme(
       axis.line = element_line(size = 4),
       plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"),
       aspect.ratio = 1  # Force square aspect ratio
     ) +
+    # Updated annotation to reflect correct relationship
     annotate("text", x = min_val, y = max_val, 
              label = sprintf("R²m = %.2f\nR²c = %.2f\nSlope = %.2f\nIntercept = %.2f", 
                              r_squared[1], r_squared[2], slope, intercept), 
@@ -224,5 +227,3 @@ for (name in names(outcomes)) {
   result <- fit_dwma_only_model(outcomes[name], data)
   print(paste(name, ":", result))
 }
-
- 
