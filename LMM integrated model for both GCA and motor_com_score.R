@@ -21,15 +21,20 @@ data[categorical_vars] <- lapply(data[categorical_vars], as.factor)
 continuous_vars <- c("DWMA", "ga", "pmamri")
 data[paste0(continuous_vars, "_scaled")] <- lapply(data[continuous_vars], scale)
 
-# Function to fit LMM model and extract results
+# Center variables used in interaction (important for interpretation of main effects)
+# Convert factors to numeric for centering
+data$hriskses_c <- as.numeric(data$hriskses) - mean(as.numeric(data$hriskses), na.rm=TRUE)
+data$globalcatmod_c <- as.numeric(data$globalcatmod) - mean(as.numeric(data$globalcatmod), na.rm=TRUE)
+
+# Update the model formula in the fit_lmm_model function
 fit_lmm_model <- function(outcome_var) {
   na_count <- sum(is.na(data[[outcome_var]]))
   print(paste("Number of NA values in", outcome_var, ":", na_count))
   data_clean <- data[!is.na(data[[outcome_var]]), ]
   
   formula <- as.formula(paste(outcome_var, "~ DWMA_scaled + ga_scaled + pmamri_scaled +
-                     hdp + ante_steroids + sex + 
-                     dc_mommilk + globalcatmod + hriskses + bpdgrade + (1|twins)"))
+                     hdp + ante_steroids + sex + bpdgrade +
+                     dc_mommilk + globalcatmod_c + hriskses_c + globalcatmod_c:hriskses_c + (1|twins)"))
   lmm_model <- lmer(formula, data = data_clean)
   
   # Create summary dataframe
@@ -141,10 +146,19 @@ create_scatter_plot <- function(data, x, y, r_squared, title) {
 
 # Function to create fixed effects plot
 create_fixed_effects_plot <- function(coef_summary, title) {
+  # Map variable names to their abbreviated versions
   predictor_names <- c(
-    "pmamri_scaled" = "PMA (scaled)", "DWMA_scaled" = "DWMA (scaled)",
-    "hdp1" = "HDP", "ante_steroids1" = "ACS", "sex1" = "SEX",
-    "dc_mommilk1" = "MMDD", "hriskses1" = "HRSS", "globalcatmod1" = "msBAS",
+    "pmamri_scaled" = "PMA", 
+    "DWMA_scaled" = "DWMA",
+    "ga_scaled" = "GA",
+    "hdp1" = "HDP", 
+    "ante_steroids1" = "ACS", 
+    "sex1" = "SEX",
+    "dc_mommilk1" = "MMDD", 
+    "hriskses_c" = "HRSS", 
+    "globalcatmod_c" = "BAS",
+    "globalcatmod_c:hriskses_c" = "BAS*HRSS", 
+    "interaction_term" = "BAS*HRSS",
     "bpdgrade" = "BPD"
   )
   
@@ -227,3 +241,92 @@ for (name in names(outcomes)) {
   result <- fit_dwma_only_model(outcomes[name], data)
   print(paste(name, ":", result))
 }
+
+# Function to extract formatted results for all predictors in a model
+extract_all_predictors_formatted <- function(model, outcome_name) {
+  # Get model summary
+  model_summary <- summary(model)$coefficients
+  
+  # Get confidence intervals
+  ci <- confint(model)
+  
+  # Create empty data frame for results
+  results <- data.frame(
+    Predictor = rownames(model_summary),
+    Beta = numeric(nrow(model_summary)),
+    CI_Lower = numeric(nrow(model_summary)),
+    CI_Upper = numeric(nrow(model_summary)),
+    P_Value = numeric(nrow(model_summary))
+  )
+  
+  # Fill in values
+  for (i in 1:nrow(model_summary)) {
+    var_name <- rownames(model_summary)[i]
+    results$Predictor[i] <- var_name
+    results$Beta[i] <- model_summary[var_name, "Estimate"]
+    results$CI_Lower[i] <- ci[var_name, 1]
+    results$CI_Upper[i] <- ci[var_name, 2]
+    results$P_Value[i] <- model_summary[var_name, "Pr(>|t|)"]
+  }
+  
+  # Replace predictor names with more readable names
+  name_mapping <- c(
+    "(Intercept)" = "Intercept",
+    "DWMA_scaled" = "DWMA",
+    "ga_scaled" = "GA",
+    "pmamri_scaled" = "PMA",
+    "hdp1" = "HDP",
+    "ante_steroids1" = "ACS",
+    "sex1" = "Sex",
+    "dc_mommilk1" = "MMDD", 
+    "hriskses_c" = "HRSS",
+    "globalcatmod_c" = "BAS",
+    "globalcatmod_c:hriskses_c" = "BAS*HRSS",
+    "interaction_term" = "BAS*HRSS",
+    "bpdgrade" = "BPD"
+  )
+  
+  # Apply name mapping
+  results$Predictor <- sapply(results$Predictor, function(x) {
+    if (x %in% names(name_mapping)) name_mapping[x] else x
+  })
+  
+  # Format p-values
+  results$P_Value_Formatted <- ifelse(
+    results$P_Value < 0.001, 
+    "<0.001", 
+    sprintf("%.3f", results$P_Value)
+  )
+  
+  # Round numeric values to 1 decimal place
+  results$Beta <- round(results$Beta, 1)
+  results$CI_Lower <- round(results$CI_Lower, 1)
+  results$CI_Upper <- round(results$CI_Upper, 1)
+  
+  # Format exactly as in the table
+  formatted_table <- data.frame(
+    Predictors = results$Predictor,
+    Beta = results$Beta,
+    CI = sprintf("%.1f, %.1f", results$CI_Lower, results$CI_Upper),
+    P = results$P_Value_Formatted
+  )
+  
+  # Set row names to NULL
+  rownames(formatted_table) <- NULL
+  
+  # Remove intercept from results
+  formatted_table <- formatted_table[formatted_table$Predictors != "Intercept", ]
+  
+  # Write to CSV
+  write.csv(formatted_table, paste0("formatted_table_", outcome_name, ".csv"), row.names = FALSE)
+  
+  return(formatted_table)
+}
+
+# Extract results for both models
+gca_table <- extract_all_predictors_formatted(gca_model$model, "cognitive")
+motor_table <- extract_all_predictors_formatted(motor_model$model, "motor")
+
+# Print tables
+print(gca_table)
+print(motor_table)
