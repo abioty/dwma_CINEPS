@@ -12,13 +12,17 @@ data[categorical_vars] <- lapply(data[categorical_vars], as.factor)
 continuous_vars <- c("DWMA", "ga", "pmamri")
 data[paste0(continuous_vars, "_scaled")] <- lapply(data[continuous_vars], scale)
 
-# Fit GLMM model
+# Center variables used in interaction (important for interpretation of main effects)
+data$hriskses_c <- as.numeric(data$hriskses) - mean(as.numeric(data$hriskses), na.rm=TRUE)
+data$globalcatmod_c <- as.numeric(data$globalcatmod) - mean(as.numeric(data$globalcatmod), na.rm=TRUE)
+
+# Fit GLMM model with centered variables
 fit_glmm_model <- function(outcome_var, data) {
   data_clean <- data[complete.cases(data[, c(outcome_var, "DWMA_scaled", "ga_scaled", "pmamri_scaled", 
-                                             "hdp", "ante_steroids", "sex", "dc_mommilk", "globalcatmod", 
-                                             "hriskses", "bpdgrade", "twins")]), ]
+                                             "hdp", "ante_steroids", "sex", "dc_mommilk", "globalcatmod_c", 
+                                             "hriskses_c", "bpdgrade", "twins")]), ]
   formula <- as.formula(paste(outcome_var, "~ DWMA_scaled + ga_scaled + pmamri_scaled +
-                     hdp + ante_steroids + sex + dc_mommilk + globalcatmod * hriskses + bpdgrade + (1|twins)"))
+                     hdp + ante_steroids + sex + dc_mommilk + globalcatmod_c * hriskses_c + bpdgrade + (1|twins)"))
   model <- glmer(formula, data = data_clean, family = binomial, control = glmerControl(optimizer = "Nelder_Mead"))
   list(model = model, data = data_clean)
 }
@@ -46,10 +50,10 @@ write.csv(fe_summary, "logistic_fixed_effects_motor_cp2_summary.csv", row.names 
 
 # Define predictor names
 predictor_names <- c(
-  "globalcatmod1:hriskses1" = "BAS:HRSS",
+  "globalcatmod_c:hriskses_c" = "BAS*HRSS",
   "bpdgrade" = "BPD",
-  "globalcatmod1" = "msBAS",
-  "hriskses1" = "HRSS",
+  "globalcatmod_c" = "BAS",
+  "hriskses_c" = "HRSS",
   "dc_mommilk1" = "MMDD",
   "sex1" = "SEX",
   "ante_steroids1" = "ACS",
@@ -140,5 +144,6 @@ ggsave("Combined_CP_Model_Plots2.tiff", combined_plot, width = 10, height = 4, d
 
 # Print summary of fixed effects for verification
 print(fe_summary)
+
 
  
