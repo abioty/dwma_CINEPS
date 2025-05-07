@@ -11,7 +11,7 @@ library(broom.mixed)
 library(lmerTest)
 
 # Read the data
-data <- read.csv('dwma_gca_cp_f.csv')
+data <- read.csv('merged_data_with_globalbrainscore.csv')
 
 # Convert categorical variables to factors
 categorical_vars <- c("twins", "hdp", "ante_steroids", "sex", "dc_mommilk", "hriskses", "globalcatmod")
@@ -330,3 +330,126 @@ motor_table <- extract_all_predictors_formatted(motor_model$model, "motor")
 # Print tables
 print(gca_table)
 print(motor_table)
+
+
+#Sensitivity analysis (after removing subjects with severe brain abnormality score)
+
+# Create filtered dataset excluding subjects with moderate-severe brain abnormality
+data_filtered <- data[data$globalbrainscore2 <= 12, ]
+
+# Print the number of subjects included/excluded
+cat("Original dataset:", nrow(data), "subjects\n")
+cat("Filtered dataset:", nrow(data_filtered), "subjects\n")
+cat("Excluded", nrow(data) - nrow(data_filtered), "subjects with moderate-severe brain abnormality (score > 7)\n")
+
+# Update the model formula in the fit_lmm_model function
+fit_lmm_model <- function(outcome_var, dataset) {
+  na_count <- sum(is.na(dataset[[outcome_var]]))
+  print(paste("Number of NA values in", outcome_var, ":", na_count))
+  data_clean <- dataset[!is.na(dataset[[outcome_var]]), ]
+  
+  formula <- as.formula(paste(outcome_var, "~ DWMA_scaled + ga_scaled + pmamri_scaled +
+                     hdp + ante_steroids + sex + bpdgrade +
+                     dc_mommilk + globalcatmod_c + hriskses_c + globalcatmod_c:hriskses_c + (1|twins)"))
+  lmm_model <- lmer(formula, data = data_clean)
+  
+  # Create summary dataframe
+  coef_summary <- summary(lmm_model)$coefficients
+  coef_summary <- data.frame(
+    term = rownames(coef_summary),
+    estimate = coef_summary[, "Estimate"],
+    std.error = coef_summary[, "Std. Error"],
+    statistic = coef_summary[, "t value"],
+    p.value = coef_summary[, "Pr(>|t|)"]
+  )
+  
+  # Calculate confidence intervals for fixed effects only
+  ci <- confint(lmm_model, parm = "beta_")
+  
+  # Add confidence intervals to coef_summary
+  coef_summary$conf.low <- ci[,1]
+  coef_summary$conf.high <- ci[,2]
+  
+  return(list(model = lmm_model, coef_summary = coef_summary))
+}
+
+# Fit models for both outcomes with original dataset
+gca_model <- fit_lmm_model("a_das_gca_stnd", data)
+motor_model <- fit_lmm_model("motor_comp_score", data)
+
+# Fit models with filtered dataset (excluding moderate-severe brain abnormality)
+gca_model_filtered <- fit_lmm_model("a_das_gca_stnd", data_filtered)
+motor_model_filtered <- fit_lmm_model("motor_comp_score", data_filtered)
+
+# Extract DWMA results from original models
+extract_dwma_results <- function(model_result) {
+  coef_row <- model_result$coef_summary[model_result$coef_summary$term == "DWMA_scaled", ]
+  
+  estimate <- round(coef_row$estimate, 1)
+  ci_low <- round(coef_row$conf.low, 1)
+  ci_high <- round(coef_row$conf.high, 1)
+  p_value <- coef_row$p.value
+  
+  # Format p-value
+  if (p_value < 0.001) {
+    p_formatted <- "<0.001"
+  } else {
+    p_formatted <- sprintf("%.3f", p_value)
+  }
+  
+  result <- sprintf("β=%.1f; 95%% CI, %.1f to %.1f; p=%s", 
+                    estimate, ci_low, ci_high, p_formatted)
+  
+  return(result)
+}
+
+# Extract DWMA results
+gca_result_original <- extract_dwma_results(gca_model)
+motor_result_original <- extract_dwma_results(motor_model)
+gca_result_filtered <- extract_dwma_results(gca_model_filtered)
+motor_result_filtered <- extract_dwma_results(motor_model_filtered)
+
+# Print results for comparison
+cat("DWMA effects on Cognitive outcome (original dataset):\n", gca_result_original, "\n\n")
+cat("DWMA effects on Cognitive outcome (excluding moderate-severe brain abnormality):\n", gca_result_filtered, "\n\n")
+cat("DWMA effects on Motor outcome (original dataset):\n", motor_result_original, "\n\n")
+cat("DWMA effects on Motor outcome (excluding moderate-severe brain abnormality):\n", motor_result_filtered, "\n\n")
+
+# For CP model (if you have this variable)
+# Function to fit GLMM model (for CP outcome)
+fit_glmm_model <- function(outcome_var, dataset) {
+  dataset_clean <- dataset[complete.cases(dataset[, c(outcome_var, "DWMA_scaled", "ga_scaled", "pmamri_scaled", 
+                                                      "hdp", "ante_steroids", "sex", "dc_mommilk", 
+                                                      "globalcatmod_c", "hriskses_c", "bpdgrade", "twins")]), ]
+  
+  formula <- as.formula(paste(outcome_var, "~ DWMA_scaled + ga_scaled + pmamri_scaled +
+                     hdp + ante_steroids + sex + dc_mommilk + 
+                     globalcatmod_c * hriskses_c + bpdgrade + (1|twins)"))
+  
+  model <- glmer(formula, data = dataset_clean, family = binomial, 
+                 control = glmerControl(optimizer = "Nelder_Mead"))
+  
+  # Extract summary
+  model_summary <- summary(model)$coefficients
+  
+  # Extract DWMA coefficient
+  dwma_coef <- model_summary["DWMA_scaled", ]
+  
+  # Calculate CI
+  ci <- confint(model)["DWMA_scaled", ]
+  
+  # Convert to OR
+  or <- exp(dwma_coef["Estimate"])
+  ci_or <- exp(ci)
+  
+  # Format result
+  p_value <- dwma_coef["Pr(>|z|)"]
+  p_formatted <- ifelse(p_value < 0.001, "<0.001", sprintf("%.3f", p_value))
+  
+  result <- sprintf("aOR=%.1f; 95%% CI, %.1f to %.1f; p=%s", 
+                    round(or, 1), round(ci_or[1], 1), round(ci_or[2], 1), p_formatted)
+  
+  return(list(model = model, result = result))
+}
+
+-----THE END----
