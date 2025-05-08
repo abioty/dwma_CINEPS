@@ -50,9 +50,9 @@ write.csv(fe_summary, "logistic_fixed_effects_motor_cp2_summary.csv", row.names 
 
 # Define predictor names
 predictor_names <- c(
-  "globalcatmod_c:hriskses_c" = "BAS*HRSS",
+  "globalcatmod_c:hriskses_c" = "msBA*HRSS",
   "bpdgrade" = "BPD",
-  "globalcatmod_c" = "BAS",
+  "globalcatmod_c" = "msBA",
   "hriskses_c" = "HRSS",
   "dc_mommilk1" = "MMDD",
   "sex1" = "SEX",
