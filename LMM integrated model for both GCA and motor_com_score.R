@@ -158,7 +158,7 @@ create_fixed_effects_plot <- function(coef_summary, title) {
     "hriskses_c" = "HRSS", 
     "globalcatmod_c" = "BAS",
     "globalcatmod_c:hriskses_c" = "BAS*HRSS", 
-    "interaction_term" = "BAS*HRSS",
+    "interaction_term" = "msBA*HRSS",
     "bpdgrade" = "BPD"
   )
   
@@ -282,7 +282,7 @@ extract_all_predictors_formatted <- function(model, outcome_name) {
     "hriskses_c" = "HRSS",
     "globalcatmod_c" = "BAS",
     "globalcatmod_c:hriskses_c" = "BAS*HRSS",
-    "interaction_term" = "BAS*HRSS",
+    "interaction_term" = "msBA*HRSS",
     "bpdgrade" = "BPD"
   )
   
